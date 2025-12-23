@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="stylesheet" href="./app.css" />
+  <title>Trading Ledger PWA</title>
+</head>
+<body>
+  <div id="loadingOverlay" class="loading" style="display:none;">
+    <div class="loadingCard">
+      <div class="loadingTitle">正在刷新数据 <span id="loadingPct">0%</span></div>
+      <div class="loadingBarWrap"><div id="loadingBar" class="loadingBar" style="width:0%;"></div></div>
+      <div id="loadingText" class="loadingText">...</div>
+      <div class="loadingHint">外部数据失败不会崩溃，可继续手动输入。</div>
+    </div>
+  </div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-title" id="secName">—</div>
+      <div class="brand-sub">
+        最新价 <span class="mono" id="latestPrice">—</span>
+        <span class="muted">src:</span> <span class="mono" id="latestSrc">—</span>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <div class="codebox">
+        <input id="codeInput" class="input mono" inputmode="numeric" maxlength="6" placeholder="code 6位" />
+        <button id="codeGoBtn" class="btn">切换</button>
+      </div>
+      <button id="refreshBtn" class="btn">刷新数据</button>
+      <label class="btn ghost">
+        导入
+        <input id="importFile" type="file" accept=".csv,.json" style="display:none" />
+      </label>
+    </div>
+  </header>
+
+  <div class="statusline">
+    <div class="mono" id="dataStatus">—</div>
+  </div>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="summary">摘要</button>
+    <button class="tab" data-tab="factors">因子</button>
+    <button class="tab" data-tab="orders">条件单</button>
+    <button class="tab" data-tab="entry">录入</button>
+  </nav>
+
+  <main class="main">
+    <!-- Summary -->
+    <section class="pane active" id="pane-summary">
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">摘要指标</div>
+          <div class="kvgrid" id="summaryKV"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">参数与宏观</div>
+          <div class="formgrid">
+            <label class="field">
+              <span class="label">模式</span>
+              <select id="modeSelect" class="input">
+                <option value="ETF">ETF</option>
+                <option value="A股">A股</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="label">市场预期</span>
+              <select id="marketExpectation" class="input">
+                <option value="中性">正常</option>
+                <option value="非常好(追涨)">非常好(追涨)</option>
+                <option value="非常差(止损)">非常差(止损)</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="label">macro_override [-1,+1]</span>
+              <input id="macroOverride" class="input mono" placeholder="0.00" />
+            </label>
+
+            <label class="field">
+              <span class="label">强度</span>
+              <select id="macroStrength" class="input">
+                <option value="低">低</option>
+                <option value="中">中</option>
+                <option value="高">高</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="label">可用现金(用于条件单)</span>
+              <input id="availCash" class="input mono" placeholder="3000" />
+            </label>
+
+            <label class="field">
+              <span class="label">最大仓位市值上限</span>
+              <input id="maxPosValue" class="input mono" placeholder="30000" />
+            </label>
+
+            <label class="field">
+              <span class="label">手续费模式</span>
+              <select id="feeMode" class="input">
+                <option value="A">A(万1最低5)</option>
+                <option value="B">B(万1最低5+其他费)</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="label">other_fee_rate</span>
+              <input id="otherFeeRate" class="input mono" placeholder="0.0" />
+            </label>
+
+            <label class="field">
+              <span class="label">other_fee_fixed</span>
+              <input id="otherFeeFixed" class="input mono" placeholder="0.0" />
+            </label>
+
+            <label class="field">
+              <span class="label">代理前缀（可选，提升稳定性）</span>
+              <input id="proxyUrl" class="input mono" placeholder="例如 https://你的worker.workers.dev/?url=" />
+            </label>
+
+            <div class="field actions">
+              <button id="saveSettingsBtn" class="btn primary">保存设置</button>
+              <button id="exportSettingsBtn" class="btn ghost">导出 settings</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="card-title">手动输入（优先级最高）</div>
+          <div class="formgrid">
+            <label class="field">
+              <span class="label">latest_price</span>
+              <input id="manualLatestPrice" class="input mono" placeholder="留空=自动" />
+            </label>
+            <label class="field">
+              <span class="label">premium（小数，例如 0.012）</span>
+              <input id="manualPremium" class="input mono" placeholder="可留空" />
+            </label>
+            <label class="field">
+              <span class="label">IOPV（价格）</span>
+              <input id="manualIOPV" class="input mono" placeholder="可留空" />
+            </label>
+            <div class="field actions">
+              <button id="applyManualBtn" class="btn">应用手动输入</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">App 内图表</div>
+          <div class="row">
+            <div class="muted">范围</div>
+            <select id="chartRange" class="input">
+              <option value="60">60天</option>
+              <option value="120">120天</option>
+              <option value="240" selected>240天</option>
+              <option value="480">480天</option>
+              <option value="99999">全部</option>
+            </select>
+            <button id="exportDailyCsvBtn" class="btn ghost">导出 daily CSV</button>
+            <button id="exportExcelXmlBtn" class="btn ghost">导出 Excel(XML)</button>
+          </div>
+          <div class="charts">
+            <canvas id="chart1" height="240"></canvas>
+            <canvas id="chart2" height="240"></canvas>
+          </div>
+          <div class="muted small">
+            说明：Excel 图表对象在纯静态前端中不稳定，因此导出提供同列数据；图表在 App 内展示。
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">导出/备份</div>
+          <div class="row wrap">
+            <button id="exportLedgerBtn" class="btn ghost">导出 ledger CSV</button>
+            <button id="exportOverridesBtn" class="btn ghost">导出 overrides CSV</button>
+            <button id="exportBundleBtn" class="btn ghost">导出 bundle(JSON)</button>
+          </div>
+          <div class="divider"></div>
+          <div class="card-title">提示</div>
+          <ul class="small muted">
+            <li>外部数据失败不会崩溃；请看顶部状态行。</li>
+            <li>所有计算使用十进制高精度 + ROUND_HALF_UP。</li>
+            <li>交易建议/下单量全部按 <b>100 股整百向下</b>。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Factors -->
+    <section class="pane" id="pane-factors">
+      <div class="card">
+        <div class="card-title">因子明细</div>
+        <div class="muted small" id="factorHint">—</div>
+        <div class="tablewrap">
+          <table class="table" id="factorTable">
+            <thead>
+              <tr>
+                <th>因子</th>
+                <th>ok</th>
+                <th>source</th>
+                <th>raw</th>
+                <th>score</th>
+                <th>weight</th>
+                <th>contrib</th>
+                <th>note</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Orders -->
+    <section class="pane" id="pane-orders">
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">锚点</div>
+          <div class="row">
+            <div>anchor=<span class="mono" id="anchorValue">—</span></div>
+            <div class="muted">src:<span class="mono" id="anchorSrc">—</span></div>
+          </div>
+          <div class="formgrid">
+            <label class="field">
+              <span class="label">锚点模式</span>
+              <select id="anchorMode" class="input">
+                <option value="dynamic">动态锚点(近250日中位)</option>
+                <option value="smart">智能锚点(MA+分位)</option>
+                <option value="fixed">固定锚点</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">固定锚点值</span>
+              <input id="anchorFixed" class="input mono" placeholder="仅 fixed 生效" />
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">条件单参数</div>
+          <div class="formgrid">
+            <label class="field">
+              <span class="label">自定义档位</span>
+              <select id="useCustomLevels" class="input">
+                <option value="false">使用默认(按模式)</option>
+                <option value="true">使用自定义</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">add_levels（逗号分隔，如 -0.03,-0.05,...）</span>
+              <input id="addLevels" class="input mono" placeholder="留空=默认" />
+            </label>
+            <label class="field">
+              <span class="label">tp_levels（逗号分隔，如 0.05,0.08,...）</span>
+              <input id="tpLevels" class="input mono" placeholder="留空=默认" />
+            </label>
+            <label class="field">
+              <span class="label">tp_base_ratios（5个比率）</span>
+              <input id="tpBaseRatios" class="input mono" placeholder="0.15,0.15,0.20,0.20,0.30" />
+            </label>
+            <div class="field actions">
+              <button id="saveOrdersSettingsBtn" class="btn primary">保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">加仓表（按档位给出“增量下单量”）</div>
+          <div class="tablewrap">
+            <table class="table" id="addTable">
+              <thead>
+                <tr>
+                  <th>档位</th>
+                  <th>触发价</th>
+                  <th>建议买入股数</th>
+                  <th>预计扣款(含费)</th>
+                  <th>触发状态</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">止盈表（含止损建议：仅“非常差”时出现）</div>
+          <div class="tablewrap">
+            <table class="table" id="tpTable">
+              <thead>
+                <tr>
+                  <th>档位</th>
+                  <th>触发价</th>
+                  <th>建议卖出股数</th>
+                  <th>预计到账(含费)</th>
+                  <th>触发状态/提示</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Entry -->
+    <section class="pane" id="pane-entry">
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">新增流水（交割口径）</div>
+          <div class="formgrid">
+            <label class="field">
+              <span class="label">日期</span>
+              <input id="tradeDate" type="date" class="input mono" />
+            </label>
+            <label class="field">
+              <span class="label">方向</span>
+              <select id="tradeSide" class="input">
+                <option value="BUY">买入</option>
+                <option value="SELL">卖出</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">股数（整百向下）</span>
+              <input id="tradeShares" class="input mono" inputmode="numeric" placeholder="100,200,..." />
+            </label>
+            <label class="field">
+              <span class="label">成交价</span>
+              <input id="tradePrice" class="input mono" placeholder="如 2.345" />
+            </label>
+            <label class="field full">
+              <span class="label">备注</span>
+              <input id="tradeNote" class="input" placeholder="可选" />
+            </label>
+
+            <div class="field full">
+              <div class="calcbox">
+                <div class="calcrow">
+                  <button id="calcCashBtn" class="btn">计算含费金额</button>
+                  <span class="muted small" id="calcDeltaCashNote">—</span>
+                </div>
+                <div class="calckv">
+                  <div>delta_cash=<span class="mono" id="calcDeltaCash">—</span></div>
+                  <div>commission=<span class="mono" id="calcCommission">—</span></div>
+                  <div>other_fee=<span class="mono" id="calcOtherFee">—</span></div>
+                  <div>含费成交均价=<span class="mono" id="calcAvgFill">—</span></div>
+                </div>
+                <button id="addTradeBtn" class="btn primary">写入 ledger</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">每日价格覆盖（overrides）</div>
+          <div class="formgrid">
+            <label class="field">
+              <span class="label">日期</span>
+              <input id="overrideDate" type="date" class="input mono" />
+            </label>
+            <label class="field">
+              <span class="label">latest_price</span>
+              <input id="overridePrice" class="input mono" placeholder="如 2.345" />
+            </label>
+            <div class="field actions">
+              <button id="setOverrideBtn" class="btn">设置/更新</button>
+              <button id="clearOverrideBtn" class="btn danger">清除</button>
+            </div>
+          </div>
+          <div class="muted small">daily series 生成时优先级：overrides → K线 close_map → ffill。</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">历史流水（可删）</div>
+        <div class="tablewrap">
+          <table class="table" id="ledgerTable">
+            <thead>
+              <tr>
+                <th>date</th>
+                <th>delta_shares</th>
+                <th>delta_cash</th>
+                <th>trade_price</th>
+                <th>fee_commission</th>
+                <th>fee_other</th>
+                <th>note</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">daily series（最近 240 行）</div>
+        <div class="tablewrap">
+          <table class="table" id="dailyTable">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
